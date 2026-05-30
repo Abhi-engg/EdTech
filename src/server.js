@@ -1,54 +1,12 @@
-const express = require("express");
-const { PrismaClient } = require("@prisma/client");
-const dotenv = require("dotenv");
+import http from "http";
+import app from "./app.js";
+import env from "./config/env.js";
+import prisma from "./db/prisma.js";
 
-dotenv.config();
+const server = http.createServer(app);
 
-const prisma = new PrismaClient();
-const app = express();
-const port = process.env.PORT || 3000;
-
-app.use(express.json());
-
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
-});
-
-app.get("/users", async (req, res, next) => {
-  try {
-    const users = await prisma.user.findMany({
-      orderBy: { createdAt: "desc" },
-    });
-    res.json(users);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/users", async (req, res, next) => {
-  const { name, email } = req.body;
-
-  if (!name || !email) {
-    return res.status(400).json({ error: "name and email are required" });
-  }
-
-  try {
-    const user = await prisma.user.create({
-      data: { name, email },
-    });
-    res.status(201).json(user);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.use((error, req, res, next) => {
-  console.error(error);
-  res.status(500).json({ error: "Internal Server Error" });
-});
-
-const server = app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+server.listen(env.port, () => {
+  console.log(`Server running on http://localhost:${env.port}`);
 });
 
 const shutdown = async () => {

@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,9 +7,766 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  createdAt DateTime @default(now())
+model assignments {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject_enrollment_id    String              @db.Uuid
+  teacher_id               String              @db.Uuid
+  title                    String              @db.VarChar(255)
+  description              String?
+  instructions             String?
+  total_marks              Int                 @default(100) @db.SmallInt
+  passing_marks            Int?                @db.SmallInt
+  status                   assignment_status   @default(draft)
+  due_at                   DateTime            @db.Timestamptz(6)
+  published_at             DateTime?           @db.Timestamptz(6)
+  closed_at                DateTime?           @db.Timestamptz(6)
+  allow_late_submission    Boolean             @default(false)
+  late_penalty_percent     Int?                @default(0) @db.SmallInt
+  plagiarism_check_enabled Boolean             @default(true)
+  plagiarism_threshold     Int                 @default(40) @db.SmallInt
+  created_at               DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime            @default(now()) @db.Timestamptz(6)
+  deleted_at               DateTime?           @db.Timestamptz(6)
+  subject_enrollments      subject_enrollments @relation(fields: [subject_enrollment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                    users               @relation(fields: [teacher_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  submissions              submissions[]
+
+  @@index([due_at], map: "idx_assignments_due_at")
+  @@index([status], map: "idx_assignments_status")
+  @@index([subject_enrollment_id], map: "idx_assignments_subject_enrollment_id")
+  @@index([teacher_id], map: "idx_assignments_teacher_id")
+}
+
+model attachments {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uploaded_by       String              @db.Uuid
+  institution_id    String              @db.Uuid
+  category          attachment_category
+  original_filename String              @db.VarChar(255)
+  stored_filename   String              @db.VarChar(255)
+  storage_path      String
+  mime_type         String              @db.VarChar(100)
+  size_bytes        BigInt
+  checksum_sha256   String?             @db.VarChar(64)
+  is_public         Boolean             @default(false)
+  entity_type       String?             @db.VarChar(50)
+  entity_id         String?             @db.Uuid
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?           @db.Timestamptz(6)
+  institutions      institutions        @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users             users               @relation(fields: [uploaded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  summaries         summaries[]
+
+  @@index([entity_type, entity_id], map: "idx_attachments_entity")
+  @@index([institution_id], map: "idx_attachments_institution_id")
+  @@index([uploaded_by], map: "idx_attachments_uploaded_by")
+}
+
+model attempt_answers {
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  attempt_id          String        @db.Uuid
+  question_id         String        @db.Uuid
+  selected_option_ids String[]      @db.Uuid
+  is_correct          Boolean?
+  marks_awarded       Decimal?      @db.Decimal(5, 2)
+  answered_at         DateTime?     @db.Timestamptz(6)
+  created_at          DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime      @default(now()) @db.Timestamptz(6)
+  test_attempts       test_attempts @relation(fields: [attempt_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  questions           questions     @relation(fields: [question_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([attempt_id, question_id])
+  @@index([attempt_id], map: "idx_attempt_answers_attempt_id")
+  @@index([question_id], map: "idx_attempt_answers_question_id")
+}
+
+model attendance_records {
+  id                                          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id                                  String              @db.Uuid
+  student_id                                  String              @db.Uuid
+  status                                      attendance_status   @default(absent)
+  marked_at                                   DateTime?           @db.Timestamptz(6)
+  latitude                                    Decimal?            @db.Decimal(10, 8)
+  longitude                                   Decimal?            @db.Decimal(11, 8)
+  location_accuracy_meters                    Int?                @db.SmallInt
+  wifi_bssid_detected                         String?             @db.VarChar(50)
+  distance_from_classroom_m                   Int?                @db.SmallInt
+  is_location_valid                           Boolean?
+  is_override                                 Boolean             @default(false)
+  override_by                                 String?             @db.Uuid
+  override_reason                             String?
+  override_at                                 DateTime?           @db.Timestamptz(6)
+  device_id                                   String?             @db.VarChar(255)
+  created_at                                  DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                                  DateTime            @default(now()) @db.Timestamptz(6)
+  users_attendance_records_override_byTousers users?              @relation("attendance_records_override_byTousers", fields: [override_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendance_sessions                         attendance_sessions @relation(fields: [session_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_attendance_records_student_idTousers  users               @relation("attendance_records_student_idTousers", fields: [student_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([session_id, student_id])
+  @@index([marked_at], map: "idx_attendance_records_marked_at")
+  @@index([session_id], map: "idx_attendance_records_session_id")
+  @@index([status], map: "idx_attendance_records_status")
+  @@index([student_id], map: "idx_attendance_records_student_id")
+}
+
+model attendance_sessions {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject_enrollment_id  String               @db.Uuid
+  timetable_slot_id      String?              @db.Uuid
+  teacher_id             String               @db.Uuid
+  lecture_number         Int                  @db.SmallInt
+  session_date           DateTime             @db.Date
+  started_at             DateTime             @default(now()) @db.Timestamptz(6)
+  closed_at              DateTime?            @db.Timestamptz(6)
+  geofence_latitude      Decimal              @db.Decimal(10, 8)
+  geofence_longitude     Decimal              @db.Decimal(11, 8)
+  geofence_radius_meters Int                  @default(50) @db.SmallInt
+  wifi_bssid             String?              @db.VarChar(50)
+  total_students         Int                  @default(0) @db.SmallInt
+  present_count          Int                  @default(0) @db.SmallInt
+  absent_count           Int                  @default(0) @db.SmallInt
+  notes                  String?
+  created_at             DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime             @default(now()) @db.Timestamptz(6)
+  attendance_records     attendance_records[]
+  subject_enrollments    subject_enrollments  @relation(fields: [subject_enrollment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                  users                @relation(fields: [teacher_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  timetable_slots        timetable_slots?     @relation(fields: [timetable_slot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([subject_enrollment_id, lecture_number, session_date])
+  @@index([closed_at], map: "idx_attendance_sessions_closed_at")
+  @@index([session_date], map: "idx_attendance_sessions_session_date")
+  @@index([subject_enrollment_id], map: "idx_attendance_sessions_subject_enrollment_id")
+  @@index([teacher_id], map: "idx_attendance_sessions_teacher_id")
+}
+
+model attendance_summaries {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id            String              @db.Uuid
+  subject_enrollment_id String              @db.Uuid
+  total_sessions        Int                 @default(0) @db.SmallInt
+  present_count         Int                 @default(0) @db.SmallInt
+  absent_count          Int                 @default(0) @db.SmallInt
+  late_count            Int                 @default(0) @db.SmallInt
+  excused_count         Int                 @default(0) @db.SmallInt
+  attendance_percentage Decimal             @default(0.00) @db.Decimal(5, 2)
+  is_below_threshold    Boolean             @default(false)
+  last_updated_at       DateTime            @default(now()) @db.Timestamptz(6)
+  users                 users               @relation(fields: [student_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject_enrollments   subject_enrollments @relation(fields: [subject_enrollment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([student_id, subject_enrollment_id])
+  @@index([is_below_threshold], map: "idx_attendance_summaries_is_below_threshold")
+  @@index([student_id], map: "idx_attendance_summaries_student_id")
+  @@index([subject_enrollment_id], map: "idx_attendance_summaries_subject_enrollment_id")
+}
+
+model batches {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  department_id    String             @db.Uuid
+  name             String             @db.VarChar(100)
+  admission_year   Int                @db.SmallInt
+  graduation_year  Int                @db.SmallInt
+  is_active        Boolean            @default(true)
+  created_by       String             @db.Uuid
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
+  deleted_at       DateTime?          @db.Timestamptz(6)
+  users            users              @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departments      departments        @relation(fields: [department_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  semesters        semesters[]
+  student_profiles student_profiles[]
+
+  @@index([department_id], map: "idx_batches_department_id")
+}
+
+model departments {
+  id                                  String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_id                      String       @db.Uuid
+  hod_id                              String?      @db.Uuid
+  name                                String       @db.VarChar(255)
+  code                                String       @db.VarChar(20)
+  description                         String?
+  is_active                           Boolean      @default(true)
+  created_by                          String       @db.Uuid
+  created_at                          DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at                          DateTime     @default(now()) @db.Timestamptz(6)
+  deleted_at                          DateTime?    @db.Timestamptz(6)
+  batches                             batches[]
+  users_departments_created_byTousers users        @relation("departments_created_byTousers", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_departments_hod_idTousers     users?       @relation("departments_hod_idTousers", fields: [hod_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  institutions                        institutions @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subjects                            subjects[]
+
+  @@unique([institution_id, code])
+  @@index([hod_id], map: "idx_departments_hod_id")
+  @@index([institution_id], map: "idx_departments_institution_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model institutions {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String          @db.VarChar(255)
+  slug                 String          @unique @db.VarChar(100)
+  email                String          @unique @db.VarChar(255)
+  phone                String?         @db.VarChar(20)
+  address              String?
+  city                 String?         @db.VarChar(100)
+  state                String?         @db.VarChar(100)
+  country              String          @default("India") @db.VarChar(100)
+  logo_url             String?
+  website              String?         @db.VarChar(255)
+  attendance_threshold Int             @default(75) @db.SmallInt
+  academic_year_start  DateTime?       @db.Date
+  academic_year_end    DateTime?       @db.Date
+  timezone             String          @default("Asia/Kolkata") @db.VarChar(100)
+  is_active            Boolean         @default(true)
+  created_by           String?         @db.Uuid
+  created_at           DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime        @default(now()) @db.Timestamptz(6)
+  deleted_at           DateTime?       @db.Timestamptz(6)
+  attachments          attachments[]
+  departments          departments[]
+  notifications        notifications[]
+  subscriptions        subscriptions[]
+  users                users[]
+
+  @@index([deleted_at], map: "idx_institutions_deleted_at")
+  @@index([is_active], map: "idx_institutions_is_active")
+  @@index([slug], map: "idx_institutions_slug")
+}
+
+model notifications {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String               @db.Uuid
+  institution_id String               @db.Uuid
+  type           notification_type
+  channel        notification_channel @default(in_app)
+  title          String               @db.VarChar(255)
+  body           String
+  action_url     String?
+  entity_type    String?              @db.VarChar(50)
+  entity_id      String?              @db.Uuid
+  is_read        Boolean              @default(false)
+  read_at        DateTime?            @db.Timestamptz(6)
+  is_sent        Boolean              @default(false)
+  sent_at        DateTime?            @db.Timestamptz(6)
+  failed_at      DateTime?            @db.Timestamptz(6)
+  fail_reason    String?
+  created_at     DateTime             @default(now()) @db.Timestamptz(6)
+  institutions   institutions         @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users          users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_notifications_created_at")
+  @@index([entity_type, entity_id], map: "idx_notifications_entity")
+  @@index([is_read], map: "idx_notifications_is_read")
+  @@index([user_id], map: "idx_notifications_user_id")
+}
+
+model question_options {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  question_id   String    @db.Uuid
+  option_text   String
+  is_correct    Boolean   @default(false)
+  display_order Int       @db.SmallInt
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  questions     questions @relation(fields: [question_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([question_id], map: "idx_question_options_question_id")
+}
+
+model questions {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  test_id          String             @db.Uuid
+  type             question_type      @default(mcq_single)
+  question_text    String
+  explanation      String?
+  marks            Int                @default(1) @db.SmallInt
+  display_order    Int                @db.SmallInt
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
+  attempt_answers  attempt_answers[]
+  question_options question_options[]
+  tests            tests              @relation(fields: [test_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([test_id], map: "idx_questions_test_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model semesters {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batch_id            String                @db.Uuid
+  number              Int                   @db.SmallInt
+  type                semester_type
+  start_date          DateTime              @db.Date
+  end_date            DateTime              @db.Date
+  is_current          Boolean               @default(false)
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime              @default(now()) @db.Timestamptz(6)
+  batches             batches               @relation(fields: [batch_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  student_profiles    student_profiles[]
+  subject_enrollments subject_enrollments[]
+
+  @@unique([batch_id, number])
+  @@index([batch_id], map: "idx_semesters_batch_id")
+  @@index([is_current], map: "idx_semesters_is_current")
+}
+
+model student_profiles {
+  id                  String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             String     @unique @db.Uuid
+  batch_id            String     @db.Uuid
+  roll_number         String     @db.VarChar(30)
+  current_semester_id String?    @db.Uuid
+  date_of_birth       DateTime?  @db.Date
+  guardian_name       String?    @db.VarChar(255)
+  guardian_phone      String?    @db.VarChar(20)
+  address             String?
+  created_at          DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime   @default(now()) @db.Timestamptz(6)
+  batches             batches    @relation(fields: [batch_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  semesters           semesters? @relation(fields: [current_semester_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users               users      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([batch_id, roll_number])
+  @@index([batch_id], map: "idx_student_profiles_batch_id")
+  @@index([roll_number], map: "idx_student_profiles_roll_number")
+  @@index([user_id], map: "idx_student_profiles_user_id")
+}
+
+model student_subject_enrollments {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id            String              @db.Uuid
+  subject_enrollment_id String              @db.Uuid
+  enrolled_at           DateTime            @default(now()) @db.Timestamptz(6)
+  is_active             Boolean             @default(true)
+  users                 users               @relation(fields: [student_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject_enrollments   subject_enrollments @relation(fields: [subject_enrollment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([student_id, subject_enrollment_id])
+  @@index([student_id], map: "idx_sse_student_id")
+  @@index([subject_enrollment_id], map: "idx_sse_subject_enrollment_id")
+}
+
+model subject_enrollments {
+  id                                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject_id                                  String                        @db.Uuid
+  semester_id                                 String                        @db.Uuid
+  teacher_id                                  String                        @db.Uuid
+  classroom                                   String?                       @db.VarChar(50)
+  created_by                                  String                        @db.Uuid
+  created_at                                  DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                                  DateTime                      @default(now()) @db.Timestamptz(6)
+  assignments                                 assignments[]
+  attendance_sessions                         attendance_sessions[]
+  attendance_summaries                        attendance_summaries[]
+  student_subject_enrollments                 student_subject_enrollments[]
+  users_subject_enrollments_created_byTousers users                         @relation("subject_enrollments_created_byTousers", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  semesters                                   semesters                     @relation(fields: [semester_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subjects                                    subjects                      @relation(fields: [subject_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_subject_enrollments_teacher_idTousers users                         @relation("subject_enrollments_teacher_idTousers", fields: [teacher_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  summaries                                   summaries[]
+  tests                                       tests[]
+  timetable_slots                             timetable_slots[]
+
+  @@unique([subject_id, semester_id])
+  @@index([semester_id], map: "idx_subject_enrollments_semester_id")
+  @@index([subject_id], map: "idx_subject_enrollments_subject_id")
+  @@index([teacher_id], map: "idx_subject_enrollments_teacher_id")
+}
+
+model subjects {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  department_id          String                @db.Uuid
+  name                   String                @db.VarChar(255)
+  code                   String                @db.VarChar(30)
+  description            String?
+  credits                Int?                  @db.SmallInt
+  total_lectures_planned Int?                  @db.SmallInt
+  is_active              Boolean               @default(true)
+  created_by             String                @db.Uuid
+  created_at             DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime              @default(now()) @db.Timestamptz(6)
+  deleted_at             DateTime?             @db.Timestamptz(6)
+  subject_enrollments    subject_enrollments[]
+  users                  users                 @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departments            departments           @relation(fields: [department_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([department_id, code])
+  @@index([department_id], map: "idx_subjects_department_id")
+}
+
+model submissions {
+  id                                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assignment_id                       String            @db.Uuid
+  student_id                          String            @db.Uuid
+  status                              submission_status @default(submitted)
+  submitted_at                        DateTime          @default(now()) @db.Timestamptz(6)
+  is_late                             Boolean           @default(false)
+  student_notes                       String?
+  marks_obtained                      Decimal?          @db.Decimal(6, 2)
+  grade_percentage                    Decimal?          @db.Decimal(5, 2)
+  teacher_feedback                    String?
+  graded_by                           String?           @db.Uuid
+  graded_at                           DateTime?         @db.Timestamptz(6)
+  ai_suggested_marks                  Decimal?          @db.Decimal(6, 2)
+  ai_suggestion_reasoning             String?
+  plagiarism_score                    Decimal?          @db.Decimal(5, 2)
+  plagiarism_checked_at               DateTime?         @db.Timestamptz(6)
+  created_at                          DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at                          DateTime          @default(now()) @db.Timestamptz(6)
+  assignments                         assignments       @relation(fields: [assignment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_submissions_graded_byTousers  users?            @relation("submissions_graded_byTousers", fields: [graded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_submissions_student_idTousers users             @relation("submissions_student_idTousers", fields: [student_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([assignment_id, student_id])
+  @@index([assignment_id], map: "idx_submissions_assignment_id")
+  @@index([graded_by], map: "idx_submissions_graded_by")
+  @@index([status], map: "idx_submissions_status")
+  @@index([student_id], map: "idx_submissions_student_id")
+}
+
+model subscriptions {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_id           String              @db.Uuid
+  plan                     plan_tier           @default(free)
+  status                   subscription_status @default(trialing)
+  student_limit            Int                 @default(100)
+  storage_limit_gb         Int                 @default(5) @db.SmallInt
+  trial_ends_at            DateTime?           @db.Timestamptz(6)
+  current_period_start     DateTime?           @db.Timestamptz(6)
+  current_period_end       DateTime?           @db.Timestamptz(6)
+  cancelled_at             DateTime?           @db.Timestamptz(6)
+  cancel_reason            String?
+  external_subscription_id String?             @db.VarChar(255)
+  created_at               DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime            @default(now()) @db.Timestamptz(6)
+  institutions             institutions        @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([institution_id], map: "idx_subscriptions_institution_id")
+  @@index([status], map: "idx_subscriptions_status")
+}
+
+model summaries {
+  id                        String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject_enrollment_id     String              @db.Uuid
+  teacher_id                String              @db.Uuid
+  title                     String              @db.VarChar(255)
+  source_attachment_id      String?             @db.Uuid
+  generation_status         generation_status   @default(pending)
+  generation_model          String?             @db.VarChar(100)
+  generation_prompt_version Int                 @default(1) @db.SmallInt
+  key_points                Json?
+  important_questions       Json?
+  full_summary              String?
+  raw_ai_response           String?
+  generation_tokens_used    Int?
+  generation_cost_usd       Decimal?            @db.Decimal(8, 6)
+  is_shared_with_students   Boolean             @default(false)
+  shared_at                 DateTime?           @db.Timestamptz(6)
+  is_edited_by_teacher      Boolean             @default(false)
+  failed_reason             String?
+  retry_count               Int                 @default(0) @db.SmallInt
+  created_at                DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime            @default(now()) @db.Timestamptz(6)
+  deleted_at                DateTime?           @db.Timestamptz(6)
+  attachments               attachments?        @relation(fields: [source_attachment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject_enrollments       subject_enrollments @relation(fields: [subject_enrollment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                     users               @relation(fields: [teacher_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([generation_status], map: "idx_summaries_generation_status")
+  @@index([is_shared_with_students], map: "idx_summaries_is_shared")
+  @@index([subject_enrollment_id], map: "idx_summaries_subject_enrollment_id")
+  @@index([teacher_id], map: "idx_summaries_teacher_id")
+}
+
+model test_attempts {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  test_id            String            @db.Uuid
+  student_id         String            @db.Uuid
+  status             attempt_status    @default(in_progress)
+  started_at         DateTime          @default(now()) @db.Timestamptz(6)
+  submitted_at       DateTime?         @db.Timestamptz(6)
+  time_taken_seconds Int?
+  marks_obtained     Decimal?          @db.Decimal(6, 2)
+  percentage         Decimal?          @db.Decimal(5, 2)
+  is_passed          Boolean?
+  tab_switch_count   Int               @default(0) @db.SmallInt
+  is_flagged         Boolean           @default(false)
+  flag_reason        String?
+  result_released_at DateTime?         @db.Timestamptz(6)
+  created_at         DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime          @default(now()) @db.Timestamptz(6)
+  attempt_answers    attempt_answers[]
+  users              users             @relation(fields: [student_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tests              tests             @relation(fields: [test_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([test_id, student_id])
+  @@index([status], map: "idx_test_attempts_status")
+  @@index([student_id], map: "idx_test_attempts_student_id")
+  @@index([test_id], map: "idx_test_attempts_test_id")
+}
+
+model tests {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject_enrollment_id    String              @db.Uuid
+  teacher_id               String              @db.Uuid
+  title                    String              @db.VarChar(255)
+  instructions             String?
+  status                   test_status         @default(draft)
+  scheduled_at             DateTime?           @db.Timestamptz(6)
+  duration_minutes         Int                 @db.SmallInt
+  total_marks              Int                 @db.SmallInt
+  passing_marks            Int?                @db.SmallInt
+  randomise_questions      Boolean             @default(true)
+  randomise_options        Boolean             @default(true)
+  allow_review             Boolean             @default(true)
+  show_result_immediately  Boolean             @default(false)
+  tab_switch_detection     Boolean             @default(true)
+  max_tab_switches_allowed Int                 @default(3) @db.SmallInt
+  published_at             DateTime?           @db.Timestamptz(6)
+  completed_at             DateTime?           @db.Timestamptz(6)
+  created_at               DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime            @default(now()) @db.Timestamptz(6)
+  deleted_at               DateTime?           @db.Timestamptz(6)
+  questions                questions[]
+  test_attempts            test_attempts[]
+  subject_enrollments      subject_enrollments @relation(fields: [subject_enrollment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                    users               @relation(fields: [teacher_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([scheduled_at], map: "idx_tests_scheduled_at")
+  @@index([status], map: "idx_tests_status")
+  @@index([subject_enrollment_id], map: "idx_tests_subject_enrollment_id")
+  @@index([teacher_id], map: "idx_tests_teacher_id")
+}
+
+model timetable_exceptions {
+  id                     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  timetable_slot_id      String          @db.Uuid
+  exception_date         DateTime        @db.Date
+  is_cancelled           Boolean         @default(false)
+  replacement_start_time DateTime?       @db.Time(6)
+  replacement_end_time   DateTime?       @db.Time(6)
+  replacement_classroom  String?         @db.VarChar(50)
+  reason                 String?
+  created_by             String          @db.Uuid
+  created_at             DateTime        @default(now()) @db.Timestamptz(6)
+  users                  users           @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  timetable_slots        timetable_slots @relation(fields: [timetable_slot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([exception_date], map: "idx_timetable_exceptions_date")
+  @@index([timetable_slot_id], map: "idx_timetable_exceptions_slot_id")
+}
+
+model timetable_slots {
+  id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject_enrollment_id String                 @db.Uuid
+  day                   day_of_week
+  start_time            DateTime               @db.Time(6)
+  end_time              DateTime               @db.Time(6)
+  classroom             String?                @db.VarChar(50)
+  effective_from        DateTime               @db.Date
+  effective_until       DateTime?              @db.Date
+  is_active             Boolean                @default(true)
+  created_by            String                 @db.Uuid
+  created_at            DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime               @default(now()) @db.Timestamptz(6)
+  attendance_sessions   attendance_sessions[]
+  timetable_exceptions  timetable_exceptions[]
+  users                 users                  @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subject_enrollments   subject_enrollments    @relation(fields: [subject_enrollment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([day], map: "idx_timetable_slots_day")
+  @@index([subject_enrollment_id], map: "idx_timetable_slots_subject_enrollment_id")
+}
+
+model user_sessions {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String    @db.Uuid
+  token_hash     String    @unique
+  device_info    Json?
+  last_active_at DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at     DateTime  @db.Timestamptz(6)
+  revoked_at     DateTime? @db.Timestamptz(6)
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  users          users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([expires_at], map: "idx_user_sessions_expires_at")
+  @@index([token_hash], map: "idx_user_sessions_token_hash")
+  @@index([user_id], map: "idx_user_sessions_user_id")
+}
+
+model users {
+  id                                                        String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  institution_id                                            String?                       @db.Uuid
+  role                                                      user_role
+  email                                                     String                        @unique @db.VarChar(255)
+  email_verified_at                                         DateTime?                     @db.Timestamptz(6)
+  password_hash                                             String
+  first_name                                                String                        @db.VarChar(100)
+  last_name                                                 String                        @db.VarChar(100)
+  phone                                                     String?                       @db.VarChar(20)
+  profile_photo_url                                         String?
+  employee_id                                               String?                       @db.VarChar(50)
+  is_active                                                 Boolean                       @default(true)
+  is_first_login                                            Boolean                       @default(true)
+  last_login_at                                             DateTime?                     @db.Timestamptz(6)
+  password_reset_token                                      String?
+  password_reset_expires_at                                 DateTime?                     @db.Timestamptz(6)
+  created_by                                                String?                       @db.Uuid
+  created_at                                                DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                                                DateTime                      @default(now()) @db.Timestamptz(6)
+  deleted_at                                                DateTime?                     @db.Timestamptz(6)
+  assignments                                               assignments[]
+  attachments                                               attachments[]
+  attendance_records_attendance_records_override_byTousers  attendance_records[]          @relation("attendance_records_override_byTousers")
+  attendance_records_attendance_records_student_idTousers   attendance_records[]          @relation("attendance_records_student_idTousers")
+  attendance_sessions                                       attendance_sessions[]
+  attendance_summaries                                      attendance_summaries[]
+  batches                                                   batches[]
+  departments_departments_created_byTousers                 departments[]                 @relation("departments_created_byTousers")
+  departments_departments_hod_idTousers                     departments[]                 @relation("departments_hod_idTousers")
+  notifications                                             notifications[]
+  student_profiles                                          student_profiles?
+  student_subject_enrollments                               student_subject_enrollments[]
+  subject_enrollments_subject_enrollments_created_byTousers subject_enrollments[]         @relation("subject_enrollments_created_byTousers")
+  subject_enrollments_subject_enrollments_teacher_idTousers subject_enrollments[]         @relation("subject_enrollments_teacher_idTousers")
+  subjects                                                  subjects[]
+  submissions_submissions_graded_byTousers                  submissions[]                 @relation("submissions_graded_byTousers")
+  submissions_submissions_student_idTousers                 submissions[]                 @relation("submissions_student_idTousers")
+  summaries                                                 summaries[]
+  test_attempts                                             test_attempts[]
+  tests                                                     tests[]
+  timetable_exceptions                                      timetable_exceptions[]
+  timetable_slots                                           timetable_slots[]
+  user_sessions                                             user_sessions[]
+  users                                                     users?                        @relation("usersTousers", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_users                                               users[]                       @relation("usersTousers")
+  institutions                                              institutions?                 @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([deleted_at], map: "idx_users_deleted_at")
+  @@index([email], map: "idx_users_email")
+  @@index([institution_id], map: "idx_users_institution_id")
+  @@index([is_active], map: "idx_users_is_active")
+  @@index([role], map: "idx_users_role")
+}
+
+enum assignment_status {
+  draft
+  published
+  closed
+  archived
+}
+
+enum attachment_category {
+  assignment_question
+  assignment_submission
+  summary_source
+  summary_output
+  profile_photo
+  institution_logo
+}
+
+enum attempt_status {
+  in_progress
+  submitted
+  timed_out
+  flagged
+  graded
+}
+
+enum attendance_status {
+  present
+  absent
+  late
+  excused
+  manually_overridden
+}
+
+enum day_of_week {
+  monday
+  tuesday
+  wednesday
+  thursday
+  friday
+  saturday
+  sunday
+}
+
+enum generation_status {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum notification_channel {
+  in_app
+  email
+  push
+}
+
+enum notification_type {
+  attendance_session_started
+  attendance_warning
+  assignment_published
+  assignment_graded
+  assignment_due_reminder
+  test_scheduled
+  test_starting
+  test_result_released
+  summary_shared
+  general
+}
+
+enum plan_tier {
+  free
+  basic
+  pro
+  enterprise
+}
+
+enum question_type {
+  mcq_single
+  mcq_multiple
+  true_false
+}
+
+enum semester_type {
+  odd
+  even
+  summer
+}
+
+enum submission_status {
+  submitted
+  late_submitted
+  graded
+  returned
+  resubmission_requested
+}
+
+enum subscription_status {
+  trialing
+  active
+  past_due
+  cancelled
+  suspended
+}
+
+enum test_status {
+  draft
+  scheduled
+  active
+  completed
+  cancelled
+}
+
+enum user_role {
+  super_admin
+  institution_admin
+  hod
+  teacher
+  student
 }
