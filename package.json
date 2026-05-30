@@ -17,8 +17,13 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "dependencies": {
+    "@better-auth/prisma-adapter": "^1.6.12",
     "@prisma/client": "^5.22.0",
+    "better-auth": "^1.6.12",
     "dotenv": "^17.4.2",
     "express": "^4.22.2",
     "pg": "^8.21.0"
